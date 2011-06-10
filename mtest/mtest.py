@@ -13,6 +13,10 @@ import mdp.utils
 # TODO: remove personal dependencies
 # TODO: properly handle tables path (e.g., os-independent)
 # TODO: compressed npy files instead of .mat
+# TODO: documentation
+# TODO: refactor, change names
+# TODO: profile
+# TODO: remove print statements, replace with logging
 
 TABLESPATH = os.path.join(os.path.dirname(__file__), 'tables/')
 TABLESNAME = 'bayes_ttest_table_n1_%d_n2_%d.mat'
