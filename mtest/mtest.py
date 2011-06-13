@@ -27,7 +27,20 @@ def _set_tables_path(path):
     global TABLESPATH
     TABLESPATH = path
 
-def marg_prior(model, n):
+def _marginalize_prior(model, n):
+    """Computes the marginal likelihood by integrating over the prior.
+
+    Input:
+    ----------------
+
+    model -- PyMC model
+    n -- number of samples from the prior used to compute the integral
+
+    Output:
+    -------
+
+    Returns an estimate of the marginal likelihood
+    """
     sm = 0.
     for i in range(n):
         model.draw_from_prior()
@@ -99,7 +112,7 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
         return pymc.normal_like(pops, muy, 1./(stdy**2.))
     
     model0 = pymc.Model((muy, stdy, y))
-    marg_M0 = marg_prior(model0, nprior)
+    marg_M0 = _marginalize_prior(model0, nprior)
 
     # M1
     mu1y, std1y = _sameprior_distr(pop1, sgm_max=1.)
@@ -112,7 +125,7 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
         return ll
     
     model1 = pymc.Model((mu1y, std1y, mu2y, std2y, y2))
-    marg_M1 = marg_prior(model1, nprior)
+    marg_M1 = _marginalize_prior(model1, nprior)
 
     # M2
     std3y = pymc.Uniform('std3y', 0.001, 1.)
@@ -124,7 +137,7 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
         return ll
     
     model2 = pymc.Model((mu1y, mu2y, std3y, y3))
-    marg_M2 = marg_prior(model2, nprior)
+    marg_M2 = _marginalize_prior(model2, nprior)
     
     M1M0 = marg_M1/marg_M0
     M2M0 = marg_M2/marg_M0
