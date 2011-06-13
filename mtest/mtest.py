@@ -45,11 +45,45 @@ def _sameprior_distr(data, sgm_max=3.):
     stdy = pymc.Uniform('stdy', 0.001, sgm_max)
     return muy, stdy
     
-def bayesian_ttest(pop1, pop2, nprior=NPRIOR):
-    """
+def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
+    """Computes the model selection statistics for the m-test.
+
+    This function returns the statistics for the m-test, namely the
+    maximum of two marginal likelihood ratios, comparing two
+    alternative models to a null model:
+
+       ( P( M1 | data )  P( M2 | data ) )
+    max( --------------, -------------- )
+       ( P( M0 | data )  P( M0 | data ) )
+
+    M0 is the null model, where the data comes from a common Gaussian
+    distributions; in the first alternative model, M1, the data comes
+    from two Gaussian distributions with different means but equal
+    standard deviation; finally, in the second alternative model, M2,
+    the data comes from two Gaussians with different means and
+    standard deviations.
+
+    Note that the probability of each model is computed by integrating
+    out the parameters (i.e., the means and standard deviations),
+    which avoids problems due to a different number of parameters in
+    the models.
+
+    Input:
+    ------
+    
     pop1, pop2 -- samples from the two populations
-    nprior -- number of samples from prior to estimate the marginal likelihood
+    
+    nprior -- number of samples from the prior over parameters, used
+              to estimate the marginal likelihood integral
+
+    Output:
+    -------
+
+    The value of the statistics. A value larger than 1 indicates a
+    higher probability for the alternative models with different means
+    than for the null model.
     """
+    
     pops = sp.concatenate((pop1, pop2))
     # rescale to zero mean, unit variance
     shift, scale = pops.mean(), pops.std()
@@ -98,7 +132,7 @@ def bayesian_ttest(pop1, pop2, nprior=NPRIOR):
     return max(M1M0, M2M0)
 
 def mtest(pop1, pop2, nprior=NPRIOR, min_ncases=50000):
-    data_value = bayesian_ttest(pop1, pop2, nprior)
+    data_value = mtest_marginal_likelihood_ratio(pop1, pop2, nprior)
     test_values = get_table(pop1.shape[0], pop2.shape[0], min_ncases)
     N = len(test_values)
     pval = (test_values>data_value).sum() / float(test_values.shape[0])
@@ -159,7 +193,9 @@ def get_table(n1, n2, ncases):
 
     missing_values = sp.zeros((nmissing,))
     for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
-        missing_values[i] = bayesian_ttest(pop1_test[i,:], pop2_test[i,:], nprior=NPRIOR)
+        missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
+                                                            pop2_test[i,:],
+                                                            nprior=NPRIOR)
 
     # update and save table
     test_values = sp.concatenate((test_values, missing_values))
@@ -204,7 +240,9 @@ def get_typeII_table(n1, n2, ncases, mean_dist, scale1):
     bayes_missing_values = sp.zeros((nmissing,))
     t_missing_values = sp.zeros((nmissing,))
     for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
-        bayes_missing_values[i] = bayesian_ttest(pop1_test[i,:], pop2_test[i,:], nprior=NPRIOR)
+        bayes_missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
+                                                                  pop2_test[i,:],
+                                                                  nprior=NPRIOR)
         t_missing_values[i] = stats.ttest_ind(pop1_test[i,:], pop2_test[i,:])[1]
 
     # update and save table
