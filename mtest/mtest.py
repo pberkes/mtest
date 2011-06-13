@@ -2,15 +2,14 @@
 # Copyright (c) 2011 Pietro Berkes
 # License: GPL v3
 
-import scipy, scipy.io, scipy.stats, pymc
-import scipy.integrate as sint
-import scipy.stats as ss
-import private
-private.import_scipy_common(globals())
+import scipy as sp
+import scipy.io
+from scipy import stats
+import pymc
 import os.path
 import mdp.utils
 
-# TODO: remove personal dependencies
+# TODO: remove progressbar dependency (mdp.utils)
 # TODO: properly handle tables path (e.g., os-independent)
 # TODO: compressed npy files instead of .mat
 # TODO: documentation
@@ -33,14 +32,14 @@ def marg_prior(model, n):
     for i in range(n):
         model.draw_from_prior()
         for obs_distr in model.observed_stochastics:
-            sm += exp(obs_distr.logp)
+            sm += sp.exp(obs_distr.logp)
     return sm/n
     
 # sgm_max: if mean is 3., the std is about 3.14...
 def _sameprior_distr(data, sgm_max=3.):
     # mean and std of the mean
     mu_mean = data.mean()
-    mu_std = 1/sqrt(len(data))
+    mu_std = 1/sp.sqrt(len(data))
     # distributions
     muy = pymc.Normal('muy', mu_mean, 1./mu_std**2.)
     stdy = pymc.Uniform('stdy', 0.001, sgm_max)
@@ -51,12 +50,12 @@ def bayesian_ttest(pop1, pop2, nprior=NPRIOR):
     pop1, pop2 -- samples from the two populations
     nprior -- number of samples from prior to estimate the marginal likelihood
     """
-    pops = scipy.concatenate((pop1, pop2))
+    pops = sp.concatenate((pop1, pop2))
     # rescale to zero mean, unit variance
     shift, scale = pops.mean(), pops.std()
     pop1 = (pop1-shift)/scale
     pop2 = (pop2-shift)/scale
-    pops = scipy.concatenate((pop1, pop2))
+    pops = sp.concatenate((pop1, pop2))
     
     # M0
     muy, stdy = _sameprior_distr(pops)
@@ -108,7 +107,7 @@ def mtest(pop1, pop2, nprior=NPRIOR, min_ncases=50000):
 def _random_same_mean(ncases, n1, n2):
     """Return random samples from two populations with same mean and
     standard deviation."""
-    pop_distr = ss.norm(loc=0., scale=DISTR_STD)
+    pop_distr = stats.norm(loc=0., scale=DISTR_STD)
     pop1 = pop_distr.rvs(size=(ncases, n1))
     pop2 = pop_distr.rvs(size=(ncases, n2))
     return pop1, pop2
@@ -122,8 +121,8 @@ def _random_different_mean(ncases, n1, n2, mean_dist, scale1):
               std of population 2
     """
     mean_dist = mean_dist*DISTR_STD
-    pop1_distr = ss.norm(loc=0., scale=DISTR_STD*scale1)
-    pop2_distr = ss.norm(loc=mean_dist, scale=DISTR_STD)
+    pop1_distr = stats.norm(loc=0., scale=DISTR_STD*scale1)
+    pop2_distr = stats.norm(loc=mean_dist, scale=DISTR_STD)
     pop1 = pop1_distr.rvs(size=(ncases, n1))
     pop2 = pop2_distr.rvs(size=(ncases, n2))
     return pop1, pop2
@@ -146,7 +145,7 @@ def get_table(n1, n2, ncases):
         matdict = scipy.io.loadmat(fname)
         test_values = matdict['test_values'].flatten()
     else:
-        test_values = array([])
+        test_values = sp.array([])
     
     nvalues = test_values.shape[0]
     if nvalues>=ncases:
@@ -158,12 +157,12 @@ def get_table(n1, n2, ncases):
     # compute missing entries
     pop1_test, pop2_test = _random_same_mean(nmissing, n1, n2)
 
-    missing_values = zeros((nmissing,))
+    missing_values = sp.zeros((nmissing,))
     for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
         missing_values[i] = bayesian_ttest(pop1_test[i,:], pop2_test[i,:], nprior=NPRIOR)
 
     # update and save table
-    test_values = scipy.concatenate((test_values, missing_values))
+    test_values = sp.concatenate((test_values, missing_values))
     print 'saving', fname
     scipy.io.savemat(fname, {'test_values': test_values})
 
@@ -189,8 +188,8 @@ def get_typeII_table(n1, n2, ncases, mean_dist, scale1):
         bayes_test_values = matdict['bayes_test_values'].flatten()
         t_test_values = matdict['t_test_values'].flatten()
     else:
-        bayes_test_values = array([])
-        t_test_values = array([])
+        bayes_test_values = sp.array([])
+        t_test_values = sp.array([])
     
     nvalues = bayes_test_values.shape[0]
     if nvalues>=ncases:
@@ -202,15 +201,15 @@ def get_typeII_table(n1, n2, ncases, mean_dist, scale1):
     # compute missing entries
     pop1_test, pop2_test = _random_different_mean(nmissing, n1, n2, mean_dist, scale1)
 
-    bayes_missing_values = zeros((nmissing,))
-    t_missing_values = zeros((nmissing,))
+    bayes_missing_values = sp.zeros((nmissing,))
+    t_missing_values = sp.zeros((nmissing,))
     for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
         bayes_missing_values[i] = bayesian_ttest(pop1_test[i,:], pop2_test[i,:], nprior=NPRIOR)
-        t_missing_values[i] = ss.ttest_ind(pop1_test[i,:], pop2_test[i,:])[1]
+        t_missing_values[i] = stats.ttest_ind(pop1_test[i,:], pop2_test[i,:])[1]
 
     # update and save table
-    bayes_test_values = scipy.concatenate((bayes_test_values, bayes_missing_values))
-    t_test_values = scipy.concatenate((t_test_values, t_missing_values))
+    bayes_test_values = sp.concatenate((bayes_test_values, bayes_missing_values))
+    t_test_values = sp.concatenate((t_test_values, t_missing_values))
     print 'saving', fname
     scipy.io.savemat(fname, {'bayes_test_values': bayes_test_values,
                              't_test_values': t_test_values})
