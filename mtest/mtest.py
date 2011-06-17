@@ -10,55 +10,77 @@ import os.path
 import mdp.utils
 
 # TODO: remove progressbar dependency (mdp.utils)
-# TODO: properly handle tables path (e.g., os-independent)
-# TODO: compressed npy files instead of .mat
-# TODO: documentation
-# TODO: refactor, change names
+# TODO: properly handle tables path (e.g., os-independent), set location etc
+# TODO: npy files instead of .mat
+# TODO: module documentation
 # TODO: profile
 # TODO: remove print statements, replace with logging
 
 TABLESPATH = os.path.join(os.path.dirname(__file__), 'tables/')
 TABLESNAME = 'bayes_ttest_table_n1_%d_n2_%d.mat'
 TYPEII_TABLESNAME = 'bayes_ttest_typeII_n1_%d_n2_%d_mdist_%.2f_scale_%.2f.mat'
-DISTR_STD = 1.
-NPRIOR = 1500
+
+_DISTR_STD = 1.0
+_NPRIOR = 1500
+
 
 def _set_tables_path(path):
     global TABLESPATH
     TABLESPATH = path
 
+
+# ============ mtest_marginal_likelihood_ratio
+
 def _marginalize_prior(model, n):
     """Computes the marginal likelihood by integrating over the prior.
 
-    Input:
-    ----------------
+    Parameters
+    ----------
+    model : PyMC model
+    n : number of samples from the prior used to compute the integral
 
-    model -- PyMC model
-    n -- number of samples from the prior used to compute the integral
-
-    Output:
+    Returns
     -------
-
-    Returns an estimate of the marginal likelihood
+    mlhood : estimate of the marginal likelihood
     """
+
     sm = 0.
     for i in range(n):
         model.draw_from_prior()
         for obs_distr in model.observed_stochastics:
             sm += sp.exp(obs_distr.logp)
     return sm/n
-    
-# sgm_max: if mean is 3., the std is about 3.14...
-def _sameprior_distr(data, sgm_max=3.):
-    # mean and std of the mean
+
+def _prior_from_data(data, sgm_max=3.0):
+    """Generate PyMC prior over mean and standard deviation given the data.
+
+    The data is used to inform the prior over the mean: the
+    distribution is centered at the empirical mean and its standard
+    deviation is the standard error of the mean.
+
+    The prior over the standard deviation is a uniform distribution
+    between 10^-3 and `sgm_max`.
+
+    Parameters
+    ----------
+    data : data to be modeled
+    sgm_max: upper limit for the standard deviation
+
+    Returns
+    -------
+    muy : PyMC model over the mean (a Normal distribution)
+    stdy : PyMC model over the standard deviation (a Uniform distribution)
+    """
+
+    # empirical mean and std of the mean
     mu_mean = data.mean()
     mu_std = 1/sp.sqrt(len(data))
-    # distributions
+    # build prior distributions
     muy = pymc.Normal('muy', mu_mean, 1./mu_std**2.)
     stdy = pymc.Uniform('stdy', 0.001, sgm_max)
     return muy, stdy
-    
-def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
+
+def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=_NPRIOR):
     """Computes the model selection statistics for the m-test.
 
     This function returns the statistics for the m-test, namely the
@@ -81,31 +103,28 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
     which avoids problems due to a different number of parameters in
     the models.
 
-    Input:
-    ------
-    
-    pop1, pop2 -- samples from the two populations
-    
-    nprior -- number of samples from the prior over parameters, used
-              to estimate the marginal likelihood integral
+    Parameters
+    ----------
+    pop1, pop2 : 1D arrays, samples from the two populations
+    nprior : number of samples from the prior over parameters, used
+             to estimate the marginal likelihood integral
 
-    Output:
+    Returns
     -------
-
     The value of the statistics. A value larger than 1 indicates a
     higher probability for the alternative models with different means
     than for the null model.
     """
-    
+
     pops = sp.concatenate((pop1, pop2))
     # rescale to zero mean, unit variance
     shift, scale = pops.mean(), pops.std()
     pop1 = (pop1-shift)/scale
     pop2 = (pop2-shift)/scale
     pops = sp.concatenate((pop1, pop2))
-    
+
     # M0
-    muy, stdy = _sameprior_distr(pops)
+    muy, stdy = _prior_from_data(pops)
     @pymc.observed
     @pymc.stochastic(dtype=float)
     def y(value=0., muy=muy, stdy=stdy):
@@ -115,8 +134,8 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
     marg_M0 = _marginalize_prior(model0, nprior)
 
     # M1
-    mu1y, std1y = _sameprior_distr(pop1, sgm_max=1.)
-    mu2y, std2y = _sameprior_distr(pop2, sgm_max=1.)
+    mu1y, std1y = _prior_from_data(pop1, sgm_max=1.)
+    mu2y, std2y = _prior_from_data(pop2, sgm_max=1.)
     @pymc.observed
     @pymc.stochastic(dtype=float)
     def y2(value=0., mu1y=mu1y, std1y=std1y, mu2y=mu2y, std2y=std2y):
@@ -135,52 +154,103 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=NPRIOR):
         ll = pymc.normal_like(pop1, mu1y, 1./(std3y**2.))
         ll += pymc.normal_like(pop2, mu2y, 1./(std3y**2.))
         return ll
-    
+
     model2 = pymc.Model((mu1y, mu2y, std3y, y3))
     marg_M2 = _marginalize_prior(model2, nprior)
-    
+
     M1M0 = marg_M1/marg_M0
     M2M0 = marg_M2/marg_M0
-    
+
     return max(M1M0, M2M0)
 
-def mtest(pop1, pop2, nprior=NPRIOR, min_ncases=50000):
-    data_value = mtest_marginal_likelihood_ratio(pop1, pop2, nprior)
-    test_values = get_table(pop1.shape[0], pop2.shape[0], min_ncases)
-    N = len(test_values)
-    pval = (test_values>data_value).sum() / float(test_values.shape[0])
-    return data_value, pval, N
 
-def _random_same_mean(ncases, n1, n2):
+# ============ mtest
+
+def mtest(x, y, nprior=_NPRIOR, min_ncases=50000):
+    """Performs the m-test.
+
+    The function computes the m-test statistics (i.e., the marginal
+    likelihood ratio statistics computed in `mtest_marginal_likelihood_ratio`
+    and compares it with the tables for the same number of samples
+    as in `x` and `y`.
+
+    If the tables do not exist, or they have been computed with a
+    number of cases smaller than the one requested, they are computed
+    from scratch, which might take some time (hours).
+
+    Parameters
+    ----------
+    x : 1D array, data for first population
+    y : 1D array, data for second population
+    nprior : number of samples from the prior over parameters, used
+             to estimate the marginal likelihood integral
+             (see `mtest_marginal_likelihood_ratio`)
+    min_ncases : minimum number of cases used to build the tables for
+                 the test (default: 50000)
+
+    Returns
+    -------
+    m : statistics of the m-test
+    prob : p-value
+    ncases : number of cases in the table used to compute the p-value
+
+    See also : `mtest_marginal_likelihood_ratio`
+    """
+    m = mtest_marginal_likelihood_ratio(x, y, nprior)
+    test_values = typeI_table(x.shape[0], y.shape[0], min_ncases)
+    ncases = len(test_values)
+    prob = (test_values>m).sum() / float(test_values.shape[0])
+    return m, prob, ncases
+
+
+# ============ typeI_table
+
+def _random_same_mean(n1, n2, ncases):
     """Return random samples from two populations with same mean and
-    standard deviation."""
-    pop_distr = stats.norm(loc=0., scale=DISTR_STD)
+    standard deviation.
+
+    Generate a number of populations from Normal(0, 1).
+
+    Parameters
+    ----------
+    n1 : number of samples in population 1
+    n2 : number of samples in population 2
+    ncases : number of populations to generate
+
+    Returns
+    -------
+    pop1 : 2D array
+           pop1[i, :] contains the `n1` samples from population number i
+    pop2 : 2D array
+           pop2[i, :] contains the `n2` samples from population number i
+    """
+    pop_distr = stats.norm(loc=0., scale=_DISTR_STD)
     pop1 = pop_distr.rvs(size=(ncases, n1))
     pop2 = pop_distr.rvs(size=(ncases, n2))
     return pop1, pop2
 
-def _random_different_mean(ncases, n1, n2, mean_dist, scale1):
-    """Return random samples from two populations with same 
-    standard deviation and different mean
+def typeI_table(n1, n2, ncases):
+    """Return a table of the m-test statistics under the null hypothesis.
 
-    mean_dist -- separation in mean, as fraction of the standard deviation
-    scale1 -- the standard deviation of population 1 is scale1 times the
-              std of population 2
-    """
-    mean_dist = mean_dist*DISTR_STD
-    pop1_distr = stats.norm(loc=0., scale=DISTR_STD*scale1)
-    pop2_distr = stats.norm(loc=mean_dist, scale=DISTR_STD)
-    pop1 = pop1_distr.rvs(size=(ncases, n1))
-    pop2 = pop2_distr.rvs(size=(ncases, n2))
-    return pop1, pop2
+    The function returns a table containing the value of the
+    m-statistics of `ncases` draws from two populations of size `n1`
+    and `n2` under the null hypothesis that the mean of the two
+    populations is the same.
 
-def get_table(n1, n2, ncases):
-    """
-    Returns a table of values of the bayesian_ttest statistics under the
-    null hypothesis, for two populations of size n1 and n2.
+    If a table for population sizes `n1` and `n2` with more entries than
+    `ncases` exists, all the stored values are returned.
+    Otherwise, new cases are computed and stored, then returned.
 
-    If a table for n1 and n2 with more entries than ncases is already saved, use it.
-    Otherwise, add more entries to the table, save it, then return it.
+    Parameters
+    ----------
+    n1 : number of samples in population 1
+    n2 : number of samples in population 2
+    ncases : number of populations to generate
+
+    Returns
+    -------
+    test_values : 1D array of m-test statistics, containing *at least*
+                  `ncases` elements, but possibly more
     """
 
     print 'N1 = %d, N2 = %d' % (n1, n2)
@@ -202,13 +272,13 @@ def get_table(n1, n2, ncases):
     print 'missing %d entries' % nmissing
     
     # compute missing entries
-    pop1_test, pop2_test = _random_same_mean(nmissing, n1, n2)
+    pop1_test, pop2_test = _random_same_mean(n1, n2, nmissing)
 
     missing_values = sp.zeros((nmissing,))
     for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
         missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
                                                             pop2_test[i,:],
-                                                            nprior=NPRIOR)
+                                                            nprior=_NPRIOR)
 
     # update and save table
     test_values = sp.concatenate((test_values, missing_values))
@@ -217,70 +287,170 @@ def get_table(n1, n2, ncases):
 
     return test_values
 
-def get_typeII_table(n1, n2, ncases, mean_dist, scale1):
-    """
-    Returns a table of values of the bayesian_ttest and ttest statistics
-    for two populations of size n1 and n2 and mean difference
-    'mean_dist' times their standard deviation.
 
-    If a table for n1 and n2 with more entries than ncases is already saved, use it.
-    Otherwise, add more entries to the table, save it, then return it.
+# ============ typeII_table
+
+def _random_different_mean(n1, n2, ncases, mean, std):
+    """Return random samples from two populations with different 
+    standard deviation and different mean
+
+    Generate a number of populations from Normal(mean, std^2) and
+    Normal(0, 1).
+
+    Parameters
+    ----------
+    n1 : number of samples in population 1
+    n2 : number of samples in population 2
+    ncases : number of populations to generate
+    mean -- mean of population 1
+    std -- standard deviation of population 1
+
+    Returns
+    -------
+    pop1 : 2D array
+           pop1[i, :] contains the `n1` samples from population number i
+    pop2 : 2D array
+           pop2[i, :] contains the `n2` samples from population number i
+    """
+    mean = mean*_DISTR_STD
+    pop1_distr = stats.norm(loc=0., scale=_DISTR_STD*std)
+    pop2_distr = stats.norm(loc=mean, scale=_DISTR_STD)
+    pop1 = pop1_distr.rvs(size=(ncases, n1))
+    pop2 = pop2_distr.rvs(size=(ncases, n2))
+    return pop1, pop2
+
+def typeII_table(n1, n2, ncases, mean, std):
+    """Return a table of the m-test statistics under a specific hypothesis.
+
+    The function returns a table containing the value of the
+    m-statistics and (for comparison) the t-statistics (independent
+    t-test) of `ncases` draws from two populations of size `n1` and
+    `n2`, the first with distribution Normal(mean, std^2), and the
+    second with distribution Normal(0, 1).
+
+    The table is used to compute the power of the test under different
+    conditions.
+    
+    If a table for population sizes `n1` and `n2` with more entries than
+    `ncases` exists, all the stored values are returned.
+    Otherwise, new cases are computed and stored, then returned.
+
+    Parameters
+    ----------
+    n1 : number of samples in population 1
+    n2 : number of samples in population 2
+    ncases : number of populations to generate
+    mean -- mean of population 1
+    std -- standard deviation of population 1
+
+    Returns
+    -------
+    m_test_values : 1D array of m-test statistics, containing *at least*
+                    `ncases` elements, but possibly more
+    t_test_values : 1D array of t-test statistics, containing *at least*
+                    `ncases` elements, but possibly more
     """
 
     print 'N1 = %d, N2 = %d' % (n1, n2)
-    print 'mean_dist = %f, scale factor for pop1 = %f' % (mean_dist, scale1)
+    print 'mean = %f, scale factor for pop1 = %f' % (mean, std)
 
-    fname = TABLESPATH+TYPEII_TABLESNAME%(n1,n2,mean_dist,scale1)
+    fname = TABLESPATH+TYPEII_TABLESNAME%(n1,n2,mean,std)
     if os.path.exists(fname):
         print 'loading', fname
         matdict = scipy.io.loadmat(fname)
-        bayes_test_values = matdict['bayes_test_values'].flatten()
+        m_test_values = matdict['m_test_values'].flatten()
         t_test_values = matdict['t_test_values'].flatten()
     else:
-        bayes_test_values = sp.array([])
+        m_test_values = sp.array([])
         t_test_values = sp.array([])
     
-    nvalues = bayes_test_values.shape[0]
+    nvalues = m_test_values.shape[0]
     if nvalues>=ncases:
-        return bayes_test_values, t_test_values
+        return m_test_values, t_test_values
 
     nmissing = ncases-nvalues
     print 'missing %d entries' % nmissing
     
     # compute missing entries
-    pop1_test, pop2_test = _random_different_mean(nmissing, n1, n2, mean_dist, scale1)
+    pop1_test, pop2_test = _random_different_mean(n1, n2, nmissing, mean, std)
 
-    bayes_missing_values = sp.zeros((nmissing,))
+    m_missing_values = sp.zeros((nmissing,))
     t_missing_values = sp.zeros((nmissing,))
     for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
-        bayes_missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
-                                                                  pop2_test[i,:],
-                                                                  nprior=NPRIOR)
-        t_missing_values[i] = stats.ttest_ind(pop1_test[i,:], pop2_test[i,:])[1]
+        m_missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
+                                                              pop2_test[i,:],
+                                                              nprior=_NPRIOR)
+        t_missing_values[i] = stats.ttest_ind(pop1_test[i,:],
+                                              pop2_test[i,:])[1]
 
     # update and save table
-    bayes_test_values = sp.concatenate((bayes_test_values, bayes_missing_values))
+    m_test_values = sp.concatenate((m_test_values, m_missing_values))
     t_test_values = sp.concatenate((t_test_values, t_missing_values))
     print 'saving', fname
-    scipy.io.savemat(fname, {'bayes_test_values': bayes_test_values,
+    scipy.io.savemat(fname, {'m_test_values': m_test_values,
                              't_test_values': t_test_values})
 
-    return bayes_test_values, t_test_values
+    return m_test_values, t_test_values
 
-def typeI_threshold(n1, n2, ncases, pval=0.05):
-    typeI_values = get_table(n1, n2, ncases)
+
+# ============ utils
+
+def typeI_threshold(n1, n2, ncases, prob=0.05):
+    """Threshold on the m-statistics to achieve a certain p-value.
+
+    The function requests a table with `ncases` draws of size `n1` and
+    `n2` (see `typeI_table`), and computes the threshold value such
+    that the m-test would commit a Type I error (rejecting the null
+    hypothesis even though the mean is equal) with probability `prob`.
+
+    Parameters
+    ----------
+    n1 : number of samples in population 1
+    n2 : number of samples in population 2
+    ncases : number of populations to generate
+    prob : the taget p-value
+
+    Returns
+    -------
+    The threshold for the m_test. m-tests of size `n1`, `n2` with m-statistics
+    smaller than this value should be rejected as not significant.
+    """
+    typeI_values = typeI_table(n1, n2, ncases)
     typeI_values.sort()
-    return typeI_values[int(typeI_values.shape[0]*(1.-pval))]
+    return typeI_values[int(typeI_values.shape[0]*(1.-prob))]
 
-def compare_power(n1, n2, ncases, mean_dist, scale1):
+def compare_power(n1, n2, ncases, mean, std):
+    """Compare the power of m-test and an independent t-test.
+
+    Compute the probability of a Type II error (not rejecting the null
+    hypothesis even though the means are different) for populations of
+    size `n1` and `n2`, the first distributed as Normal(mean, std^2) and
+    the second as Normal(0, 1).
+    
+    Parameters
+    ----------
+    n1 : number of samples in population 1
+    n2 : number of samples in population 2
+    ncases : number of populations to generate
+    mean -- mean of population 1
+    std -- standard deviation of population 1
+
+    Returns
+    -------
+    m_typeII_prob : probability of type II error for the m-test
+    t_typeII_prob : probability of type II error for the t-test
+    """
     print 'get type I threshold'
-    threshold = typeI_threshold(n1, n2, ncases, pval=0.05)
+    threshold = typeI_threshold(n1, n2, ncases, prob=0.05)
     print 'threshold at 5%', threshold
 
     print 'comparing power'
-    bt, tt = get_typeII_table(n1, n2, ncases, mean_dist, scale1)
+    mt, tt = typeII_table(n1, n2, ncases, mean, std)
     
-    print 'model selection, type II error:', 1. - (bt>threshold).sum() / float(bt.shape[0])
-    print 't-test, type II error:', 1. - (tt<0.05).sum() / float(tt.shape[0])
+    print ('model selection, type II error:',
+           1. - (mt>threshold).sum() / float(mt.shape[0]))
+    print ('t-test, type II error:',
+           1. - (tt<0.05).sum() / float(tt.shape[0]))
     
-    return 1. - (bt>threshold).sum() / float(bt.shape[0]), 1. - (tt<0.05).sum() / float(tt.shape[0])
+    return (1. - (mt>threshold).sum() / float(mt.shape[0]),
+            1. - (tt<0.05).sum() / float(tt.shape[0]))
