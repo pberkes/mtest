@@ -374,12 +374,13 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
     print 'N1 = %d, N2 = %d' % (n1, n2)
     print 'mean = %f, scale factor for pop1 = %f' % (mean, std)
 
-    fname = os.join.path(get_tables_path(path),
+    fname = os.path.join(get_tables_path(path),
                          TYPEII_TABLESNAME%(n1,n2,mean,std))
     if os.path.exists(fname):
         print 'loading', fname
         matdict = scipy.io.loadmat(fname)
-        m_test_values = matdict['m_test_values'].flatten()
+        # TODO: change to m_test_values
+        m_test_values = matdict['bayes_test_values'].flatten()
         t_test_values = matdict['t_test_values'].flatten()
     else:
         m_test_values = sp.array([])
@@ -408,7 +409,7 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
     m_test_values = sp.concatenate((m_test_values, m_missing_values))
     t_test_values = sp.concatenate((t_test_values, t_missing_values))
     print 'saving', fname
-    scipy.io.savemat(fname, {'m_test_values': m_test_values,
+    scipy.io.savemat(fname, {'bayes_test_values': m_test_values,
                              't_test_values': t_test_values})
 
     return m_test_values, t_test_values
