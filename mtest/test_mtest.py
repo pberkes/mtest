@@ -24,11 +24,19 @@ class TestMTest(unittest.TestCase):
         np.random.seed(_random_seed)
         # create temporary dir for the tables
         self.tmpdir = tempfile.mkdtemp()
-        os.makedirs(os.path.join(self.tmpdir, 'mldata'))
+        os.makedirs(os.path.join(self.tmpdir, 'tables'))
 
     def tearDown(self):
         # remove temporary dir
         shutil.rmtree(self.tmpdir)
+
+    def test_mtest_build_tables(self):
+        x = np.random.randn(3)
+        y = x.copy()
+        data_value, pval, ncases = mtest.mtest(x, y, min_ncases=20,
+                                               path=self.tmpdir)
+        assert data_value < 1
+        assert pval > 0.1
 
     def test_mtest_identical(self):
         for _ in range(3):

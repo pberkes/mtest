@@ -5,18 +5,17 @@
 import scipy as sp
 import scipy.io
 from scipy import stats
+import os
 import pymc
-import os.path
 import mdp.utils
 
 # TODO: remove progressbar dependency (mdp.utils)
-# TODO: properly handle tables path (e.g., os-independent), set location etc
 # TODO: npy files instead of .mat
 # TODO: module documentation
 # TODO: profile
 # TODO: remove print statements, replace with logging
 
-TABLESPATH = os.path.join(os.path.dirname(__file__), 'tables/')
+# templates for the names of the tables
 TABLESNAME = 'bayes_ttest_table_n1_%d_n2_%d.mat'
 TYPEII_TABLESNAME = 'bayes_ttest_typeII_n1_%d_n2_%d_mdist_%.2f_scale_%.2f.mat'
 
@@ -24,9 +23,27 @@ _DISTR_STD = 1.0
 _NPRIOR = 1500
 
 
-def _set_tables_path(path):
-    global TABLESPATH
-    TABLESPATH = path
+def get_tables_path(path=None):
+    """Return the path were the m-test stores its tables.
+
+    The directory is used to store the tables used to compute p-values
+    and power of the m-test for different population sizes.
+
+    By default, the data path is set to `MTEST_PATH/tables/`, where
+    MTEST_PATH is the path where the mtest package is
+    installed. Alternatively, it can be set by the `MTEST_TABLES_PATH`
+    environment variable.
+
+    If the directory does not exist, it is created automatically.
+    """
+    if path is None:
+        path = os.environ.get('MTEST_TABLES_PATH',
+                              os.path.join(os.path.dirname(__file__),
+                                           'tables/'))
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
 
 
 # ============ mtest_marginal_likelihood_ratio
@@ -166,7 +183,7 @@ def mtest_marginal_likelihood_ratio(pop1, pop2, nprior=_NPRIOR):
 
 # ============ mtest
 
-def mtest(x, y, nprior=_NPRIOR, min_ncases=50000):
+def mtest(x, y, nprior=_NPRIOR, min_ncases=50000, path=None):
     """Performs the m-test.
 
     The function computes the m-test statistics (i.e., the marginal
@@ -187,6 +204,7 @@ def mtest(x, y, nprior=_NPRIOR, min_ncases=50000):
              (see `mtest_marginal_likelihood_ratio`)
     min_ncases : minimum number of cases used to build the tables for
                  the test (default: 50000)
+    path : path to the m-test tables (see `get_tables_path`)
 
     Returns
     -------
@@ -197,7 +215,7 @@ def mtest(x, y, nprior=_NPRIOR, min_ncases=50000):
     See also : `mtest_marginal_likelihood_ratio`
     """
     m = mtest_marginal_likelihood_ratio(x, y, nprior)
-    test_values = typeI_table(x.shape[0], y.shape[0], min_ncases)
+    test_values = typeI_table(x.shape[0], y.shape[0], min_ncases, path=path)
     ncases = len(test_values)
     prob = (test_values>m).sum() / float(test_values.shape[0])
     return m, prob, ncases
@@ -229,7 +247,7 @@ def _random_same_mean(n1, n2, ncases):
     pop2 = pop_distr.rvs(size=(ncases, n2))
     return pop1, pop2
 
-def typeI_table(n1, n2, ncases):
+def typeI_table(n1, n2, ncases, path=None):
     """Return a table of the m-test statistics under the null hypothesis.
 
     The function returns a table containing the value of the
@@ -246,6 +264,7 @@ def typeI_table(n1, n2, ncases):
     n1 : number of samples in population 1
     n2 : number of samples in population 2
     ncases : number of populations to generate
+    path : path to the m-test tables (see `get_tables_path`)
 
     Returns
     -------
@@ -255,7 +274,7 @@ def typeI_table(n1, n2, ncases):
 
     print 'N1 = %d, N2 = %d' % (n1, n2)
 
-    fname = TABLESPATH+TABLESNAME%(n1,n2)
+    fname = os.path.join(get_tables_path(path), TABLESNAME%(n1,n2))
     print fname
     if os.path.exists(fname):
         print 'loading', fname
@@ -319,7 +338,7 @@ def _random_different_mean(n1, n2, ncases, mean, std):
     pop2 = pop2_distr.rvs(size=(ncases, n2))
     return pop1, pop2
 
-def typeII_table(n1, n2, ncases, mean, std):
+def typeII_table(n1, n2, ncases, mean, std, path=None):
     """Return a table of the m-test statistics under a specific hypothesis.
 
     The function returns a table containing the value of the
@@ -342,6 +361,7 @@ def typeII_table(n1, n2, ncases, mean, std):
     ncases : number of populations to generate
     mean -- mean of population 1
     std -- standard deviation of population 1
+    path : path to the m-test tables (see `get_tables_path`)
 
     Returns
     -------
@@ -354,7 +374,8 @@ def typeII_table(n1, n2, ncases, mean, std):
     print 'N1 = %d, N2 = %d' % (n1, n2)
     print 'mean = %f, scale factor for pop1 = %f' % (mean, std)
 
-    fname = TABLESPATH+TYPEII_TABLESNAME%(n1,n2,mean,std)
+    fname = os.join.path(get_tables_path(path),
+                         TYPEII_TABLESNAME%(n1,n2,mean,std))
     if os.path.exists(fname):
         print 'loading', fname
         matdict = scipy.io.loadmat(fname)
@@ -395,7 +416,7 @@ def typeII_table(n1, n2, ncases, mean, std):
 
 # ============ utils
 
-def typeI_threshold(n1, n2, ncases, prob=0.05):
+def typeI_threshold(n1, n2, ncases, prob=0.05, path=None):
     """Threshold on the m-statistics to achieve a certain p-value.
 
     The function requests a table with `ncases` draws of size `n1` and
@@ -409,17 +430,18 @@ def typeI_threshold(n1, n2, ncases, prob=0.05):
     n2 : number of samples in population 2
     ncases : number of populations to generate
     prob : the taget p-value
+    path : path to the m-test tables (see `get_tables_path`)
 
     Returns
     -------
     The threshold for the m_test. m-tests of size `n1`, `n2` with m-statistics
     smaller than this value should be rejected as not significant.
     """
-    typeI_values = typeI_table(n1, n2, ncases)
+    typeI_values = typeI_table(n1, n2, ncases, path=path)
     typeI_values.sort()
     return typeI_values[int(typeI_values.shape[0]*(1.-prob))]
 
-def compare_power(n1, n2, ncases, mean, std):
+def compare_power(n1, n2, ncases, mean, std, path=None):
     """Compare the power of m-test and an independent t-test.
 
     Compute the probability of a Type II error (not rejecting the null
@@ -432,8 +454,9 @@ def compare_power(n1, n2, ncases, mean, std):
     n1 : number of samples in population 1
     n2 : number of samples in population 2
     ncases : number of populations to generate
-    mean -- mean of population 1
-    std -- standard deviation of population 1
+    mean : mean of population 1
+    std : standard deviation of population 1
+    path : path to the m-test tables (see `get_tables_path`)
 
     Returns
     -------
@@ -441,11 +464,11 @@ def compare_power(n1, n2, ncases, mean, std):
     t_typeII_prob : probability of type II error for the t-test
     """
     print 'get type I threshold'
-    threshold = typeI_threshold(n1, n2, ncases, prob=0.05)
+    threshold = typeI_threshold(n1, n2, ncases, prob=0.05, path=path)
     print 'threshold at 5%', threshold
 
     print 'comparing power'
-    mt, tt = typeII_table(n1, n2, ncases, mean, std)
+    mt, tt = typeII_table(n1, n2, ncases, mean, std, path=path)
     
     print ('model selection, type II error:',
            1. - (mt>threshold).sum() / float(mt.shape[0]))
