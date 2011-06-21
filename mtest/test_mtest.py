@@ -10,9 +10,6 @@ import numpy as np
 import unittest
 import mtest
 
-# TODO: test while actually computing the test table
-# TODO: test power tables
-
 _random_seed = np.random.randint(2**31-1)
 print "Execute tests with random seed:", _random_seed
 
@@ -55,6 +52,34 @@ class TestMTest(unittest.TestCase):
             assert ncases >= 1000
             assert data_value > 1
             assert pval < 0.01
+
+    def test_thresholds_from_paper(self):
+        """Test that one gets the thresholds as in the arxiv paper."""
+        thresholds = {3: 19.8, 4: 15.7, 5: 13.7, 10: 10.2, 50: 7.8}
+        for n in thresholds:
+            res = mtest.typeI_threshold(n, n, 1000)
+            # TODO: make this test stronger once mtest ships with larger tables
+            assert abs(res - thresholds[n]) < 1.
+
+    def test_typeII_from_paper(self):
+        """Test that one gets the type II error as in the arxiv paper."""
+        mtypeII_025 = {3: 0.61, 4: 0.40, 5: 0.23, 10: 0., 50: 0.}
+        mtypeII_150 = {3: 0.87, 4: 0.83, 5: 0.80, 10: 0.59, 50: 0.}
+        ttypeII_025 = {3: 0.68, 4: 0.59, 5: 0.51, 10: 0.19, 50: 0.}
+        ttypeII_150 = {3: 0.87, 4: 0.83, 5: 0.80, 10: 0.61, 50: 0.02}
+
+        sgm_2 = 0.25
+        for n in mtypeII_025:
+            mval, tval = mtest.compare_power(n, n, 1000, 1., sgm_2)
+            assert abs(mval - mtypeII_025[n]) < 0.02
+            assert abs(tval - ttypeII_025[n]) < 0.02
+
+        print '1.5'
+        sgm_2 = 1.5
+        for n in mtypeII_150:
+            mval, tval = mtest.compare_power(n, n, 1000, 1., sgm_2)
+            assert abs(mval - mtypeII_150[n]) < 0.02
+            assert abs(tval - ttypeII_150[n]) < 0.02
 
 if __name__ == '__main__':
     unittest.main()
