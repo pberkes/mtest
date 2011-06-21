@@ -6,9 +6,8 @@ import scipy as sp
 from scipy import stats
 import os
 import pymc
-import mdp.utils
+from progress_bar import progressinfo
 
-# TODO: remove progressbar dependency (mdp.utils)
 # TODO: module documentation
 # TODO: profile
 # TODO: remove print statements, replace with logging
@@ -292,7 +291,7 @@ def typeI_table(n1, n2, ncases, path=None):
     pop1_test, pop2_test = _random_same_mean(n1, n2, nmissing)
 
     missing_values = sp.zeros((nmissing,))
-    for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
+    for i in progressinfo(range(nmissing), style='timer'):
         missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
                                                             pop2_test[i,:],
                                                             nprior=_NPRIOR)
@@ -395,7 +394,7 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
 
     m_missing_values = sp.zeros((nmissing,))
     t_missing_values = sp.zeros((nmissing,))
-    for i in mdp.utils.progressinfo(range(nmissing), style='timer'):
+    for i in progressinfo(range(nmissing), style='timer'):
         m_missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
                                                               pop2_test[i,:],
                                                               nprior=_NPRIOR)
