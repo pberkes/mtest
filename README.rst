@@ -1,5 +1,5 @@
 mtest
-====
+=====
 
 `mtest` is a Python implementation of the m-test, a two-sample test
 based on model selection and described in [1] and [2].
@@ -22,8 +22,13 @@ Type II errors) than a t-test error for small sample sizes (3 to 100 samples).
 
 [2] Berkes, P., Orban, G., Lengyel, M., and Fiser, J. (2011). `Spontaneous cortical activity reveals hallmarks of an optimal internal model of the environment. <http://www.sciencemag.org/content/331/6013/83.abstract>`_ Science, 331:6013, 83–87.
 
+Dependencies
+============
+
+`mtest` requires `SciPy <http://www.scipy.org/>`_ and `PyMC <http://code.google.com/p/pymc/>`_.
+
 License
-=====
+=======
 
 `mtest` is released under the GPL v3. See LICENSE.txt .
 
