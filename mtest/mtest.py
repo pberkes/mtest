@@ -7,10 +7,12 @@ from scipy import stats
 import os
 import pymc
 from progress_bar import progressinfo
+import logging
+
+#logging.basicConfig(level=logging.DEBUG)
 
 # TODO: module documentation
 # TODO: profile
-# TODO: remove print statements, replace with logging
 
 # templates for the names of the tables
 TABLESNAME = 'mtest_typeI_n1_%d_n2_%d.npz'
@@ -269,12 +271,9 @@ def typeI_table(n1, n2, ncases, path=None):
                   `ncases` elements, but possibly more
     """
 
-    print 'N1 = %d, N2 = %d' % (n1, n2)
-
     fname = os.path.join(get_tables_path(path), TABLESNAME%(n1,n2))
-    print fname
     if os.path.exists(fname):
-        print 'loading', fname
+        logging.debug('Loading type I table %s', fname)
         npzfile = sp.load(fname)
         test_values = npzfile['test_values'].flatten()
     else:
@@ -285,21 +284,27 @@ def typeI_table(n1, n2, ncases, path=None):
         return test_values
 
     nmissing = ncases-nvalues
-    print 'missing %d entries' % nmissing
     
     # compute missing entries
-    pop1_test, pop2_test = _random_same_mean(n1, n2, nmissing)
+    if nmissing > 0:
+        logging.debug('Requested %d cases, found %d, missing %d',
+                      ncases, nvalues, nmissing)
+        print 'The requested mtest table is incomplete.'
+        print ('Need to process %d additional cases, this may take some time.'
+               % nmissing)
+        
+        missing_values = sp.zeros((nmissing,))
+        pop1_test, pop2_test = _random_same_mean(n1, n2, nmissing)
+        
+        for i in progressinfo(range(nmissing), style='timer'):
+            missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
+                                                                pop2_test[i,:],
+                                                                nprior=_NPRIOR)
 
-    missing_values = sp.zeros((nmissing,))
-    for i in progressinfo(range(nmissing), style='timer'):
-        missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
-                                                            pop2_test[i,:],
-                                                            nprior=_NPRIOR)
-
-    # update and save table
-    test_values = sp.concatenate((test_values, missing_values))
-    print 'saving', fname
-    sp.savez(fname, test_values=test_values)
+        # update and save table
+        test_values = sp.concatenate((test_values, missing_values))
+        logging.debug('Saving updated table %s', fname)
+        sp.savez(fname, test_values=test_values)
 
     return test_values
 
@@ -368,13 +373,10 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
                     `ncases` elements, but possibly more
     """
 
-    print 'N1 = %d, N2 = %d' % (n1, n2)
-    print 'mean = %f, scale factor for pop1 = %f' % (mean, std)
-
     fname = os.path.join(get_tables_path(path),
                          TYPEII_TABLESNAME%(n1,n2,mean,std))
     if os.path.exists(fname):
-        print 'loading', fname
+        logging.debug('Loading type I table %s', fname)
         npzfile = sp.load(fname)
         m_test_values = npzfile['m_test_values'].flatten()
         t_test_values = npzfile['t_test_values'].flatten()
@@ -387,25 +389,30 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
         return m_test_values, t_test_values
 
     nmissing = ncases-nvalues
-    print 'missing %d entries' % nmissing
+    if nmissing > 0:
+        logging.debug('Requested %d cases, found %d, missing %d',
+                      ncases, nvalues, nmissing)
+        print 'The requested mtest table is incomplete.'
+        print ('Need to process %d additional cases, this may take some time.'
+               % nmissing)
     
-    # compute missing entries
-    pop1_test, pop2_test = _random_different_mean(n1, n2, nmissing, mean, std)
+        # compute missing entries
+        pop1_test, pop2_test = _random_different_mean(n1, n2, nmissing,
+                                                      mean, std)
 
-    m_missing_values = sp.zeros((nmissing,))
-    t_missing_values = sp.zeros((nmissing,))
-    for i in progressinfo(range(nmissing), style='timer'):
-        m_missing_values[i] = mtest_marginal_likelihood_ratio(pop1_test[i,:],
-                                                              pop2_test[i,:],
-                                                              nprior=_NPRIOR)
-        t_missing_values[i] = stats.ttest_ind(pop1_test[i,:],
-                                              pop2_test[i,:])[1]
+        m_missing_values = sp.zeros((nmissing,))
+        t_missing_values = sp.zeros((nmissing,))
+        for i in progressinfo(range(nmissing), style='timer'):
+            m_missing_values[i] = mtest_marginal_likelihood_ratio(
+                pop1_test[i,:], pop2_test[i,:], nprior=_NPRIOR)
+            t_missing_values[i] = stats.ttest_ind(pop1_test[i,:],
+                                                  pop2_test[i,:])[1]
 
-    # update and save table
-    m_test_values = sp.concatenate((m_test_values, m_missing_values))
-    t_test_values = sp.concatenate((t_test_values, t_missing_values))
-    print 'saving', fname
-    sp.savez(fname, m_test_values=m_test_values, t_test_values=t_test_values)
+        # update and save table
+        m_test_values = sp.concatenate((m_test_values, m_missing_values))
+        t_test_values = sp.concatenate((t_test_values, t_missing_values))
+        logging.debug('Saving updated table %s', fname)
+        sp.savez(fname, m_test_values=m_test_values, t_test_values=t_test_values)
 
     return m_test_values, t_test_values
 
@@ -459,17 +466,9 @@ def compare_power(n1, n2, ncases, mean, std, path=None):
     m_typeII_prob : probability of type II error for the m-test
     t_typeII_prob : probability of type II error for the t-test
     """
-    print 'get type I threshold'
-    threshold = typeI_threshold(n1, n2, ncases, prob=0.05, path=path)
-    print 'threshold at 5%', threshold
 
-    print 'comparing power'
+    threshold = typeI_threshold(n1, n2, ncases, prob=0.05, path=path)
     mt, tt = typeII_table(n1, n2, ncases, mean, std, path=path)
-    
-    print ('model selection, type II error:',
-           1. - (mt>threshold).sum() / float(mt.shape[0]))
-    print ('t-test, type II error:',
-           1. - (tt<0.05).sum() / float(tt.shape[0]))
     
     return (1. - (mt>threshold).sum() / float(mt.shape[0]),
             1. - (tt<0.05).sum() / float(tt.shape[0]))
