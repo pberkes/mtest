@@ -3,21 +3,19 @@
 # License: GPL v3
 
 import scipy as sp
-import scipy.io
 from scipy import stats
 import os
 import pymc
 import mdp.utils
 
 # TODO: remove progressbar dependency (mdp.utils)
-# TODO: npy files instead of .mat
 # TODO: module documentation
 # TODO: profile
 # TODO: remove print statements, replace with logging
 
 # templates for the names of the tables
-TABLESNAME = 'bayes_ttest_table_n1_%d_n2_%d.mat'
-TYPEII_TABLESNAME = 'bayes_ttest_typeII_n1_%d_n2_%d_mdist_%.2f_scale_%.2f.mat'
+TABLESNAME = 'mtest_typeI_n1_%d_n2_%d.npz'
+TYPEII_TABLESNAME = 'mtest_typeII_n1_%d_n2_%d_mean_%.2f_std_%.2f.npz'
 
 _DISTR_STD = 1.0
 _NPRIOR = 1500
@@ -278,8 +276,8 @@ def typeI_table(n1, n2, ncases, path=None):
     print fname
     if os.path.exists(fname):
         print 'loading', fname
-        matdict = scipy.io.loadmat(fname)
-        test_values = matdict['test_values'].flatten()
+        npzfile = sp.load(fname)
+        test_values = npzfile['test_values'].flatten()
     else:
         test_values = sp.array([])
     
@@ -302,7 +300,7 @@ def typeI_table(n1, n2, ncases, path=None):
     # update and save table
     test_values = sp.concatenate((test_values, missing_values))
     print 'saving', fname
-    scipy.io.savemat(fname, {'test_values': test_values})
+    sp.savez(fname, test_values=test_values)
 
     return test_values
 
@@ -378,10 +376,9 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
                          TYPEII_TABLESNAME%(n1,n2,mean,std))
     if os.path.exists(fname):
         print 'loading', fname
-        matdict = scipy.io.loadmat(fname)
-        # TODO: change to m_test_values
-        m_test_values = matdict['bayes_test_values'].flatten()
-        t_test_values = matdict['t_test_values'].flatten()
+        npzfile = sp.load(fname)
+        m_test_values = npzfile['m_test_values'].flatten()
+        t_test_values = npzfile['t_test_values'].flatten()
     else:
         m_test_values = sp.array([])
         t_test_values = sp.array([])
@@ -409,8 +406,7 @@ def typeII_table(n1, n2, ncases, mean, std, path=None):
     m_test_values = sp.concatenate((m_test_values, m_missing_values))
     t_test_values = sp.concatenate((t_test_values, t_missing_values))
     print 'saving', fname
-    scipy.io.savemat(fname, {'bayes_test_values': m_test_values,
-                             't_test_values': t_test_values})
+    sp.savez(fname, m_test_values=m_test_values, t_test_values=t_test_values)
 
     return m_test_values, t_test_values
 
