@@ -22,6 +22,22 @@ Type II errors) than a t-test error for small sample sizes (3 to 100 samples).
 
 [2] Berkes, P., Orban, G., Lengyel, M., and Fiser, J. (2011). `Spontaneous cortical activity reveals hallmarks of an optimal internal model of the environment. <http://www.sciencemag.org/content/331/6013/83.abstract>`_ Science, 331:6013, 83–87.
 
+mtest tables
+============
+
+`mtest` ships caches tables of statistics to compute the p-value and
+power of new data in the most efficient way. The library is
+distributed with tables for p-values (type I error) for N=3,4,...,20
+and for N=30,40,...,100. These tables cover the most common cases. New
+tables are computed when needed, although completion might take a few
+hours. Type II error tables are not included to keep the package size
+small.
+
+See `scripts\compute_basic_tables.py` for an example script to
+pre-compute tables you might need. The script makes use of the `joblib
+<http://packages.python.org/joblib/>`_ library to distribute the
+computations on multiple cores.
+
 Dependencies
 ============
 
