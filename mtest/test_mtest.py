@@ -74,7 +74,6 @@ class TestMTest(unittest.TestCase):
             assert abs(mval - mtypeII_025[n]) < 0.02
             assert abs(tval - ttypeII_025[n]) < 0.02
 
-        print '1.5'
         sgm_2 = 1.5
         for n in mtypeII_150:
             mval, tval = mtest.compare_power(n, n, 1000, 1., sgm_2)
