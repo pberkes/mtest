@@ -19,5 +19,6 @@ setup(name='mtest',
           'scipy (>=0.8)',
           ],
       packages=['mtest'],
-      package_data={'mtest': ['tables/*.npz']}
+      package_data={'mtest': ['tables/*.npz']},
+      scripts=['scripts/create_basic_tables.py']
       )
