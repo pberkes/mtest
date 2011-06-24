@@ -13,14 +13,14 @@ fail thus to detect significant effects in the data.
 The m-test is a classical statistical test in the sense of defining significance
 with the conventional bound on Type I errors. On the other hand, it is based
 on Bayesian model selection, and thus takes into account uncertainty about the
-model’s parameters, mitigating the problem of small samples size.
+model's parameters, mitigating the problem of small samples size.
 
 The m-test has been found to generally have a higher power (smaller fraction of
 Type II errors) than a t-test error for small sample sizes (3 to 100 samples).
 
 [1] Berkes, P., Fiser, J. (2011) `A frequentist two-sample test based on Bayesian model selection. <http://arxiv.org/abs/1104.2826>`_ arXiv:1104.2826v1 
 
-[2] Berkes, P., Orban, G., Lengyel, M., and Fiser, J. (2011). `Spontaneous cortical activity reveals hallmarks of an optimal internal model of the environment. <http://www.sciencemag.org/content/331/6013/83.abstract>`_ Science, 331:6013, 83–87.
+[2] Berkes, P., Orban, G., Lengyel, M., and Fiser, J. (2011). `Spontaneous cortical activity reveals hallmarks of an optimal internal model of the environment. <http://www.sciencemag.org/content/331/6013/83.abstract>`_ Science, 331:6013, 83-87.
 
 mtest tables
 ============
