@@ -25,7 +25,7 @@ Type II errors) than a t-test error for small sample sizes (3 to 100 samples).
 mtest tables
 ============
 
-`mtest` ships caches tables of statistics to compute the p-value and
+`mtest` caches tables of statistics to compute the p-value and
 power of new data in the most efficient way. The library is
 distributed with tables for p-values (type I error) for N=3,4,...,20
 and for N=30,40,...,100. These tables cover the most common cases. New
